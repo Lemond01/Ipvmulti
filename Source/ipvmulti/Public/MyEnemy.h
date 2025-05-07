@@ -15,10 +15,20 @@ public:
 	// Sets default values for this actor's properties
 	AMyEnemy();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite);
-	float velocity = 10.0f;
+	TSubclassOf<class AActor> spawnObject;
 
+	UPROPERTY(EditAnywhere);
+	float timer;
+	UPROPERTY(EditAnywhere);
+	float stopTimer;
 
-	virtual void Tick(float DeltaTime) override;
+	FTimerHandle timerHandle;
+	FTimerHandle stopTimerHandle;
 
+	void ShootBullet();
+	void StopShootBullet();
 
+protected:
+	virtual void BeginPlay() override;
 };
+

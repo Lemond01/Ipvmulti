@@ -11,8 +11,24 @@ AMyEnemy::AMyEnemy()
 
 }
 
-void AMyEnemy::Tick(float DeltaTime)
+void AMyEnemy::BeginPlay()
 {
-	AddActorLocalOffset(FVector(velocity,0,0));
+	Super::BeginPlay();
+	GetWorldTimerManager().SetTimer(timerHandle, this, &AMyEnemy::ShootBullet, timer, true);
+	GetWorldTimerManager().SetTimer(stopTimerHandle, this, &AMyEnemy::StopShootBullet, stopTimer, false);
 }
 
+void AMyEnemy::ShootBullet()
+{
+	if (spawnObject)
+	{
+		FVector spawnLocation = GetActorLocation();
+		FRotator spawnRotation = GetActorRotation();
+		GetWorld()->SpawnActor<AActor>(spawnObject, spawnLocation, spawnRotation);	
+	}
+}
+
+void AMyEnemy::StopShootBullet()
+{
+	GetWorldTimerManager().ClearTimer(timerHandle);
+}
