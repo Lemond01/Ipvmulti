@@ -10,6 +10,8 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "Net/UnrealNetwork.h"
+#include "Engine/Engine.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -52,6 +54,54 @@ AipvmultiCharacter::AipvmultiCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	//Initialize the player's Health
+	MaxHealth = 100.0f;
+	CurrentHealth = MaxHealth;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// Replicated Properties
+ 
+void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray <FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+ 
+	//Replicate current health.
+	DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
+}
+
+void AipvmultiCharacter::OnHealthUpdate()
+{
+	//Client-specific functionality
+	if (IsLocallyControlled())
+	{
+		FString healthMessage = FString::Printf(TEXT("You now have %f health remaining."), CurrentHealth);
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, healthMessage);
+ 
+		if (CurrentHealth <= 0)
+		{
+			FString deathMessage = FString::Printf(TEXT("You have been killed."));
+			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, deathMessage);
+		}
+	}
+ 
+	//Server-specific functionality
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		FString healthMessage = FString::Printf(TEXT("%s now has %f health remaining."), *GetFName().ToString(), CurrentHealth);
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, healthMessage);
+	}
+ 
+	//Functions that occur on all machines.
+	/*
+		Any special functionality that should occur as a result of damage or death should be placed here.
+	*/
+}
+
+void AipvmultiCharacter::OnRep_CurrentHealth()
+{
+	OnHealthUpdate();
 }
 
 //////////////////////////////////////////////////////////////////////////

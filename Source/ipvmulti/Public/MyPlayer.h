@@ -1,24 +1,30 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "MyPlayer.generated.h"
 
+class UBoxComponent;
+
 UCLASS()
 class IPVMULTI_API AMyPlayer : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
-	// Sets default values for this actor's properties
+    
+public:
 	AMyPlayer();
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly);
-	float number;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite);
-	FColor color;
 
 	virtual void Tick(float DeltaTime) override;
+
+	UPROPERTY(VisibleAnywhere, Category = "Components")
+	UBoxComponent* CollisionComp;
+
+	UPROPERTY(EditAnywhere, Category = "Gameplay")
+	float Health = 100.0f;
+
+	UFUNCTION()
+	void ReceiveDamage(float DamageAmount);
+
+protected:
+	virtual void BeginPlay() override;
 };

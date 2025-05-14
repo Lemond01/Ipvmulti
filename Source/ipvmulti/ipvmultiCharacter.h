@@ -46,6 +46,8 @@ class AipvmultiCharacter : public ACharacter
 
 public:
 	AipvmultiCharacter();
+	/** Property replication */
+	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	
 
 protected:
@@ -68,5 +70,26 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+
+// Nuestros atributos
+protected:
+	/** The player's maximum health. This is the highest value of their health can be. This value is a value of the player's health, which starts at when spawned.*/
+	UPROPERTY(EditDefaultsOnly, Category = "Health")
+	float MaxHealth;
+ 
+	/** The player's current health. When reduced to 0, they are considered dead.*/
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentHealth)
+	float CurrentHealth;
+ 
+	/** RepNotify for changes made to current health.*/
+	UFUNCTION()
+	void OnRep_CurrentHealth();
+
+	/** Response to health being updated. Called on the server immediately after modification, and on clients in response to a RepNotify*/
+	UFUNCTION()
+	void OnHealthUpdate();
+
+	
 };
 
