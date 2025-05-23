@@ -22,6 +22,8 @@ AThirdPersonMPProjectile::AThirdPersonMPProjectile()
 	SphereComponent->InitSphereRadius(37.5f);
 	SphereComponent->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	RootComponent = SphereComponent;
+
+	Damage = 10.0f;
  
 	//Registering the Projectile Impact function on a Hit event.
 	if (GetLocalRole() == ROLE_Authority)
@@ -80,9 +82,10 @@ void AThirdPersonMPProjectile::Destroyed()
  
 void AThirdPersonMPProjectile::OnProjectileImpact(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (OtherActor)
+	if (OtherActor && OtherActor != GetInstigator())
 	{
-		UGameplayStatics::ApplyPointDamage(OtherActor, Damage, NormalImpulse, Hit, GetInstigator()->Controller, this, DamageType);
+		// Aplicar daño exactamente como está configurado
+		UGameplayStatics::ApplyPointDamage(OtherActor, Damage, NormalImpulse, Hit, GetInstigator()->GetController(), this, DamageType);
 	}
 	Destroy();
 }

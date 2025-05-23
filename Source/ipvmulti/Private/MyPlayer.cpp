@@ -38,13 +38,13 @@ void AMyPlayer::ReceiveDamage(float DamageAmount)
 {
 	Health -= DamageAmount;
 
-	FString HealthString = FString::Printf(TEXT("Vida: %.1f"), Health);
+	FString HealthString = FString::Printf(TEXT("Aguante del Muro restante: %.1f"), Health);
 	GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Red, HealthString);
 
 	if (Health <= 0)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("¡Jugador Derrotado!"));
-		Destroy(); // Se destruye cuando la vida llega a 0
+		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, TEXT("¡Muro Destruido!"));
+		Destroy();
 	}
 }
 
@@ -55,10 +55,9 @@ void AMyPlayer::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 {
 	if (OtherActor && OtherActor != this)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, TEXT("¡Ay, me chocaron!"));
+		GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Yellow, TEXT("¡Impacto!"));
+		ReceiveDamage(35.0f);
 		
-		// Aplicar daño de 10 puntos por cada choque
-		ReceiveDamage(10.0f);
 	}
 }
 

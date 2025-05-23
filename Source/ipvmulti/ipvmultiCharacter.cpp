@@ -16,43 +16,32 @@ AipvmultiCharacter::AipvmultiCharacter()
     // Activa la replicación para esta clase
     bReplicates = true;
 
-    // Crear y configurar el brazo para la cámara
+    // Configuración de la cámara
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
-    CameraBoom->TargetArmLength = 300.0f; // Distancia de la cámara al personaje
-    CameraBoom->bUsePawnControlRotation = true; // Que rote con el control del jugador
+    CameraBoom->TargetArmLength = 300.0f;
+    CameraBoom->bUsePawnControlRotation = true;
 
-    // Crear y configurar la cámara
     FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
-    FollowCamera->bUsePawnControlRotation = false; // La cámara no rota independiente
+    FollowCamera->bUsePawnControlRotation = false;
 
-    TurnRateGamepad = 45.f; // Valor por defecto para giro con gamepad
-
-    // Valores por defecto de salud
+    // Configuración de gameplay
+    TurnRateGamepad = 45.f;
     MaxHealth = 100.f;
     CurrentHealth = MaxHealth;
-
     FireRate = 0.25f;
     bIsFiringWeapon = false;
+    CurrentKeys = 0;
 
-    // Replicación para variables
     SetReplicatingMovement(true);
-}
-
-void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-    // Replicar CurrentHealth para que se sincronice entre servidor y clientes
-    DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
 }
 
 void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     check(PlayerInputComponent);
 
-    // Movimiento
+    // Configuración de inputs
     PlayerInputComponent->BindAxis("MoveForward", this, &AipvmultiCharacter::MoveForward);
     PlayerInputComponent->BindAxis("MoveRight", this, &AipvmultiCharacter::MoveRight);
     PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
@@ -60,11 +49,8 @@ void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
     PlayerInputComponent->BindAxis("TurnRate", this, &AipvmultiCharacter::TurnAtRate);
     PlayerInputComponent->BindAxis("LookUpRate", this, &AipvmultiCharacter::LookUpAtRate);
 
-    // Salto
     PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
     PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
-
-    // Disparo
     PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AipvmultiCharacter::StartFire);
     PlayerInputComponent->BindAction("Fire", IE_Released, this, &AipvmultiCharacter::StopFire);
 }
@@ -73,11 +59,8 @@ void AipvmultiCharacter::MoveForward(float Value)
 {
     if ((Controller != nullptr) && (Value != 0.0f))
     {
-        // Encontrar la dirección hacia adelante
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-        // Dirección adelante en el mundo
         const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
         AddMovementInput(Direction, Value);
     }
@@ -85,13 +68,10 @@ void AipvmultiCharacter::MoveForward(float Value)
 
 void AipvmultiCharacter::MoveRight(float Value)
 {
-    if ( (Controller != nullptr) && (Value != 0.0f) )
+    if ((Controller != nullptr) && (Value != 0.0f))
     {
-        // Encontrar dirección derecha
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-        // Dirección derecha en el mundo
         const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
         AddMovementInput(Direction, Value);
     }
@@ -99,7 +79,6 @@ void AipvmultiCharacter::MoveRight(float Value)
 
 void AipvmultiCharacter::TurnAtRate(float Rate)
 {
-    // gira con tasa dependiente del frame rate
     AddControllerYawInput(Rate * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
 }
 
@@ -118,8 +97,6 @@ void AipvmultiCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Loc
     StopFire();
 }
 
-// --- Salud ---
-
 void AipvmultiCharacter::OnRep_CurrentHealth()
 {
     OnHealthUpdate();
@@ -127,11 +104,14 @@ void AipvmultiCharacter::OnRep_CurrentHealth()
 
 void AipvmultiCharacter::OnHealthUpdate()
 {
-    // Aquí puedes poner lógica para actualizar UI, efectos visuales, sonido, etc.
+    // Mostrar vida en pantalla
+    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("Vida: %.0f"), CurrentHealth));
+
     if (CurrentHealth <= 0.f)
     {
-        // Lógica de muerte (por ejemplo deshabilitar input, animaciones, etc.)
-        // Esto queda a tu implementación personalizada
+        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("¡Jugador muerto!"));
+        DisableInput(GetWorld()->GetFirstPlayerController());
+        SetLifeSpan(2.0f);
     }
 }
 
@@ -144,7 +124,8 @@ void AipvmultiCharacter::SetCurrentHealth(float healthValue)
     }
 }
 
-float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& DamageEvent, 
+                                   AController* EventInstigator, AActor* DamageCauser)
 {
     if (DamageTaken <= 0.f || CurrentHealth <= 0.f)
     {
@@ -155,12 +136,21 @@ float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& Dama
     {
         float NewHealth = CurrentHealth - DamageTaken;
         SetCurrentHealth(NewHealth);
+        
+        GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Orange, 
+            FString::Printf(TEXT("¡Recibiste %.0f de daño!"), DamageTaken));
     }
 
     return DamageTaken;
 }
 
-// --- Disparo ---
+void AipvmultiCharacter::RespawnPlayer()
+{
+    CurrentHealth = MaxHealth;
+    OnHealthUpdate();
+    EnableInput(GetWorld()->GetFirstPlayerController());
+    // Lógica adicional de respawn aquí
+}
 
 void AipvmultiCharacter::StartFire()
 {
@@ -168,8 +158,6 @@ void AipvmultiCharacter::StartFire()
     {
         bIsFiringWeapon = true;
         HandleFire();
-
-        // Iniciar timer para repetir disparo con FireRate
         GetWorldTimerManager().SetTimer(FiringTimer, this, &AipvmultiCharacter::HandleFire, FireRate, true);
     }
 }
@@ -188,16 +176,21 @@ void AipvmultiCharacter::HandleFire_Implementation()
         if (World != nullptr)
         {
             const FRotator SpawnRotation = GetControlRotation();
-            // La posición donde se dispara puede ajustarse (por ejemplo frente al personaje)
             const FVector SpawnLocation = GetActorLocation() + SpawnRotation.RotateVector(FVector(100.f, 0.f, 50.f));
 
             FActorSpawnParameters SpawnParams;
             SpawnParams.Owner = this;
             SpawnParams.Instigator = GetInstigator();
 
-            // Spawn el proyectil en el mundo
             World->SpawnActor<AThirdPersonMPProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
         }
     }
+}
+
+void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+    DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
+    DOREPLIFETIME(AipvmultiCharacter, CurrentKeys);
 }
 
