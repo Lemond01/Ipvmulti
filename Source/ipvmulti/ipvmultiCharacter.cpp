@@ -1,179 +1,203 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright 1998-2022 Epic Games, Inc. All Rights Reserved.
 
 #include "ipvmultiCharacter.h"
-#include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
-
-DEFINE_LOG_CATEGORY(LogTemplateCharacter);
-
-//////////////////////////////////////////////////////////////////////////
-// AipvmultiCharacter
+#include "ipvmulti/Public/Actors/ThirdPersonMPProjectile.h"
 
 AipvmultiCharacter::AipvmultiCharacter()
 {
-	// Set size for collision capsule
-	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
-	// Don't rotate when the controller rotates. Let that just affect the camera.
-	bUseControllerRotationPitch = false;
-	bUseControllerRotationYaw = false;
-	bUseControllerRotationRoll = false;
+    // Activa la replicación para esta clase
+    bReplicates = true;
 
-	// Configure character movement
-	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...	
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f); // ...at this rotation rate
+    // Crear y configurar el brazo para la cámara
+    CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+    CameraBoom->SetupAttachment(RootComponent);
+    CameraBoom->TargetArmLength = 300.0f; // Distancia de la cámara al personaje
+    CameraBoom->bUsePawnControlRotation = true; // Que rote con el control del jugador
 
-	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
-	// instead of recompiling to adjust them
-	GetCharacterMovement()->JumpZVelocity = 700.f;
-	GetCharacterMovement()->AirControl = 0.35f;
-	GetCharacterMovement()->MaxWalkSpeed = 500.f;
-	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
-	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
-	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
+    // Crear y configurar la cámara
+    FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
+    FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+    FollowCamera->bUsePawnControlRotation = false; // La cámara no rota independiente
 
-	// Create a camera boom (pulls in towards the player if there is a collision)
-	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
-	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character	
-	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
+    TurnRateGamepad = 45.f; // Valor por defecto para giro con gamepad
 
-	// Create a follow camera
-	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+    // Valores por defecto de salud
+    MaxHealth = 100.f;
+    CurrentHealth = MaxHealth;
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+    FireRate = 0.25f;
+    bIsFiringWeapon = false;
 
-	//Initialize the player's Health
-	MaxHealth = 100.0f;
-	CurrentHealth = MaxHealth;
+    // Replicación para variables
+    SetReplicatingMovement(true);
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Replicated Properties
- 
-void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray <FLifetimeProperty>& OutLifetimeProps) const
+void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
- 
-	//Replicate current health.
-	DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
-}
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-void AipvmultiCharacter::OnHealthUpdate()
-{
-	//Client-specific functionality
-	if (IsLocallyControlled())
-	{
-		FString healthMessage = FString::Printf(TEXT("You now have %f health remaining."), CurrentHealth);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, healthMessage);
- 
-		if (CurrentHealth <= 0)
-		{
-			FString deathMessage = FString::Printf(TEXT("You have been killed."));
-			GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Red, deathMessage);
-		}
-	}
- 
-	//Server-specific functionality
-	if (GetLocalRole() == ROLE_Authority)
-	{
-		FString healthMessage = FString::Printf(TEXT("%s now has %f health remaining."), *GetFName().ToString(), CurrentHealth);
-		GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Blue, healthMessage);
-	}
- 
-	//Functions that occur on all machines.
-	/*
-		Any special functionality that should occur as a result of damage or death should be placed here.
-	*/
-}
-
-void AipvmultiCharacter::OnRep_CurrentHealth()
-{
-	OnHealthUpdate();
-}
-
-//////////////////////////////////////////////////////////////////////////
-// Input
-
-void AipvmultiCharacter::NotifyControllerChanged()
-{
-	Super::NotifyControllerChanged();
-
-	// Add Input Mapping Context
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
+    // Replicar CurrentHealth para que se sincronice entre servidor y clientes
+    DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
 }
 
 void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
-		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+    check(PlayerInputComponent);
 
-		// Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AipvmultiCharacter::Move);
+    // Movimiento
+    PlayerInputComponent->BindAxis("MoveForward", this, &AipvmultiCharacter::MoveForward);
+    PlayerInputComponent->BindAxis("MoveRight", this, &AipvmultiCharacter::MoveRight);
+    PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
+    PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
+    PlayerInputComponent->BindAxis("TurnRate", this, &AipvmultiCharacter::TurnAtRate);
+    PlayerInputComponent->BindAxis("LookUpRate", this, &AipvmultiCharacter::LookUpAtRate);
 
-		// Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AipvmultiCharacter::Look);
-	}
-	else
-	{
-		UE_LOG(LogTemplateCharacter, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
-	}
+    // Salto
+    PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
+    PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+
+    // Disparo
+    PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AipvmultiCharacter::StartFire);
+    PlayerInputComponent->BindAction("Fire", IE_Released, this, &AipvmultiCharacter::StopFire);
 }
 
-void AipvmultiCharacter::Move(const FInputActionValue& Value)
+void AipvmultiCharacter::MoveForward(float Value)
 {
-	// input is a Vector2D
-	FVector2D MovementVector = Value.Get<FVector2D>();
+    if ((Controller != nullptr) && (Value != 0.0f))
+    {
+        // Encontrar la dirección hacia adelante
+        const FRotator Rotation = Controller->GetControlRotation();
+        const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-	if (Controller != nullptr)
-	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
-		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		// add movement 
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
-	}
+        // Dirección adelante en el mundo
+        const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+        AddMovementInput(Direction, Value);
+    }
 }
 
-void AipvmultiCharacter::Look(const FInputActionValue& Value)
+void AipvmultiCharacter::MoveRight(float Value)
 {
-	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
+    if ( (Controller != nullptr) && (Value != 0.0f) )
+    {
+        // Encontrar dirección derecha
+        const FRotator Rotation = Controller->GetControlRotation();
+        const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-	if (Controller != nullptr)
-	{
-		// add yaw and pitch input to controller
-		AddControllerYawInput(LookAxisVector.X);
-		AddControllerPitchInput(LookAxisVector.Y);
-	}
+        // Dirección derecha en el mundo
+        const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+        AddMovementInput(Direction, Value);
+    }
 }
+
+void AipvmultiCharacter::TurnAtRate(float Rate)
+{
+    // gira con tasa dependiente del frame rate
+    AddControllerYawInput(Rate * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
+}
+
+void AipvmultiCharacter::LookUpAtRate(float Rate)
+{
+    AddControllerPitchInput(Rate * TurnRateGamepad * GetWorld()->GetDeltaSeconds());
+}
+
+void AipvmultiCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Location)
+{
+    StartFire();
+}
+
+void AipvmultiCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Location)
+{
+    StopFire();
+}
+
+// --- Salud ---
+
+void AipvmultiCharacter::OnRep_CurrentHealth()
+{
+    OnHealthUpdate();
+}
+
+void AipvmultiCharacter::OnHealthUpdate()
+{
+    // Aquí puedes poner lógica para actualizar UI, efectos visuales, sonido, etc.
+    if (CurrentHealth <= 0.f)
+    {
+        // Lógica de muerte (por ejemplo deshabilitar input, animaciones, etc.)
+        // Esto queda a tu implementación personalizada
+    }
+}
+
+void AipvmultiCharacter::SetCurrentHealth(float healthValue)
+{
+    if (HasAuthority())
+    {
+        CurrentHealth = FMath::Clamp(healthValue, 0.f, MaxHealth);
+        OnHealthUpdate();
+    }
+}
+
+float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+    if (DamageTaken <= 0.f || CurrentHealth <= 0.f)
+    {
+        return 0.f;
+    }
+
+    if (HasAuthority())
+    {
+        float NewHealth = CurrentHealth - DamageTaken;
+        SetCurrentHealth(NewHealth);
+    }
+
+    return DamageTaken;
+}
+
+// --- Disparo ---
+
+void AipvmultiCharacter::StartFire()
+{
+    if (!bIsFiringWeapon)
+    {
+        bIsFiringWeapon = true;
+        HandleFire();
+
+        // Iniciar timer para repetir disparo con FireRate
+        GetWorldTimerManager().SetTimer(FiringTimer, this, &AipvmultiCharacter::HandleFire, FireRate, true);
+    }
+}
+
+void AipvmultiCharacter::StopFire()
+{
+    bIsFiringWeapon = false;
+    GetWorldTimerManager().ClearTimer(FiringTimer);
+}
+
+void AipvmultiCharacter::HandleFire_Implementation()
+{
+    if (ProjectileClass != nullptr)
+    {
+        UWorld* const World = GetWorld();
+        if (World != nullptr)
+        {
+            const FRotator SpawnRotation = GetControlRotation();
+            // La posición donde se dispara puede ajustarse (por ejemplo frente al personaje)
+            const FVector SpawnLocation = GetActorLocation() + SpawnRotation.RotateVector(FVector(100.f, 0.f, 50.f));
+
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.Owner = this;
+            SpawnParams.Instigator = GetInstigator();
+
+            // Spawn el proyectil en el mundo
+            World->SpawnActor<AThirdPersonMPProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+        }
+    }
+}
+

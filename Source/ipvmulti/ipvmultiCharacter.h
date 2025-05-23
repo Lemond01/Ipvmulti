@@ -1,95 +1,121 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright 1998-2025 Epic Games, Inc. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "Logging/LogMacros.h"
 #include "ipvmultiCharacter.generated.h"
 
-class USpringArmComponent;
-class UCameraComponent;
-class UInputMappingContext;
-class UInputAction;
-struct FInputActionValue;
-
-DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
-
 UCLASS(config=Game)
-class AipvmultiCharacter : public ACharacter
+class IPVMULTI_API AipvmultiCharacter : public ACharacter
 {
 	GENERATED_BODY()
 
 	/** Camera boom positioning the camera behind the character */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	USpringArmComponent* CameraBoom;
+	class USpringArmComponent* CameraBoom;
 
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-	UCameraComponent* FollowCamera;
-	
-	/** MappingContext */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputMappingContext* DefaultMappingContext;
-
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* JumpAction;
-
-	/** Move Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* MoveAction;
-
-	/** Look Input Action */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
-	UInputAction* LookAction;
+	class UCameraComponent* FollowCamera;
 
 public:
 	AipvmultiCharacter();
+
 	/** Property replication */
-	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	/** Base turn rate, in deg/sec */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Input)
+	float TurnRateGamepad;
+
+protected:
 	
+	void MoveForward(float Value);
+	void MoveRight(float Value);
+	void TurnAtRate(float Rate);
+	void LookUpAtRate(float Rate);
 
-protected:
+	// --- Salto ---
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void Jump() override;  // Sobrescribe la función de ACharacter
 
-	/** Called for movement input */
-	void Move(const FInputActionValue& Value);
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void StopJumping() override;
 
-	/** Called for looking input */
-	void Look(const FInputActionValue& Value);
-			
+	// --- Disparo ---
+	UFUNCTION(BlueprintCallable, Category = "Gameplay")
+	void StartFire();
 
-protected:
+	UFUNCTION(BlueprintCallable, Category = "Gameplay")
+	void StopFire();
 
-	virtual void NotifyControllerChanged() override;
+	UFUNCTION(Server, Reliable)
+	void HandleFire();
 
+	/** Handler for touch input start */
+	void TouchStarted(ETouchIndex::Type FingerIndex, FVector Location);
+
+	/** Handler for touch input stop */
+	void TouchStopped(ETouchIndex::Type FingerIndex, FVector Location);
+
+	// APawn interface
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	// End of APawn interface
 
 public:
 	/** Returns CameraBoom subobject **/
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-
-// Nuestros atributos
 protected:
-	/** The player's maximum health. This is the highest value of their health can be. This value is a value of the player's health, which starts at when spawned.*/
+	/** Max health of the player */
 	UPROPERTY(EditDefaultsOnly, Category = "Health")
 	float MaxHealth;
- 
-	/** The player's current health. When reduced to 0, they are considered dead.*/
+
+	/** Current health of the player */
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentHealth)
 	float CurrentHealth;
- 
-	/** RepNotify for changes made to current health.*/
+
+	/** RepNotify for changes made to CurrentHealth */
 	UFUNCTION()
 	void OnRep_CurrentHealth();
 
-	/** Response to health being updated. Called on the server immediately after modification, and on clients in response to a RepNotify*/
-	UFUNCTION()
+	/** Called when health is updated */
 	void OnHealthUpdate();
 
-	
-};
+public:
+	/** Getter for MaxHealth */
+	UFUNCTION(BlueprintPure, Category = "Health")
+	FORCEINLINE float GetMaxHealth() const { return MaxHealth; }
 
+	/** Getter for CurrentHealth */
+	UFUNCTION(BlueprintPure, Category = "Health")
+	FORCEINLINE float GetCurrentHealth() const { return CurrentHealth; }
+
+	/** Setter for CurrentHealth */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SetCurrentHealth(float healthValue);
+
+	/** Handle damage */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	virtual float TakeDamage(float DamageTaken, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+	
+protected:
+	/** Projectile class to spawn */
+	UPROPERTY(EditDefaultsOnly, Category = "Gameplay|Projectile")
+	TSubclassOf<class AThirdPersonMPProjectile> ProjectileClass;
+
+	/** Fire rate delay */
+	UPROPERTY(EditDefaultsOnly, Category = "Gameplay")
+	float FireRate;
+
+	/** Is firing weapon flag */
+	bool bIsFiringWeapon;
+
+	/** Timer handle for firing rate */
+	FTimerHandle FiringTimer;
+};
