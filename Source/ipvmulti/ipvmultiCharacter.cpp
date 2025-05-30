@@ -1,4 +1,4 @@
-// Copyright 1998-2022 Epic Games, Inc. All Rights Reserved.
+// Copyright 1998-2025 Epic Games, Inc. All Rights Reserved.
 
 #include "ipvmultiCharacter.h"
 #include "Camera/CameraComponent.h"
@@ -13,10 +13,10 @@
 
 AipvmultiCharacter::AipvmultiCharacter()
 {
-    // Activa la replicación para esta clase
+    // Activate replication
     bReplicates = true;
 
-    // Configuración de la cámara
+    // Camera setup
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
     CameraBoom->TargetArmLength = 300.0f;
@@ -26,7 +26,7 @@ AipvmultiCharacter::AipvmultiCharacter()
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     FollowCamera->bUsePawnControlRotation = false;
 
-    // Configuración de gameplay
+    // Gameplay setup
     TurnRateGamepad = 45.f;
     MaxHealth = 100.f;
     CurrentHealth = MaxHealth;
@@ -41,7 +41,7 @@ void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 {
     check(PlayerInputComponent);
 
-    // Configuración de inputs
+    // Inputs setup
     PlayerInputComponent->BindAxis("MoveForward", this, &AipvmultiCharacter::MoveForward);
     PlayerInputComponent->BindAxis("MoveRight", this, &AipvmultiCharacter::MoveRight);
     PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
@@ -99,20 +99,25 @@ void AipvmultiCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Loc
 
 void AipvmultiCharacter::OnRep_CurrentHealth()
 {
-    OnHealthUpdate();
+    OnHealthUpdate(); 
 }
 
-void AipvmultiCharacter::OnHealthUpdate()
+void AipvmultiCharacter::OnHealthUpdate_Implementation()
 {
-    // Mostrar vida en pantalla
-    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("Vida: %.0f"), CurrentHealth));
-
-    if (CurrentHealth <= 0.f)
+    // Return health to screen
+    if (!HasAuthority())
     {
-        GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("¡Jugador muerto!"));
-        DisableInput(GetWorld()->GetFirstPlayerController());
-        SetLifeSpan(2.0f);
+        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("Vida: %.0f"), CurrentHealth));
+
+        if (CurrentHealth <= 0.f)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("¡Jugador muerto!"));
+            DisableInput(GetWorld()->GetFirstPlayerController());
+            SetLifeSpan(2.0f);
+        }
+        return;
     }
+
 }
 
 void AipvmultiCharacter::SetCurrentHealth(float healthValue)
@@ -149,7 +154,6 @@ void AipvmultiCharacter::RespawnPlayer()
     CurrentHealth = MaxHealth;
     OnHealthUpdate();
     EnableInput(GetWorld()->GetFirstPlayerController());
-    // Lógica adicional de respawn aquí
 }
 
 void AipvmultiCharacter::StartFire()

@@ -1,6 +1,6 @@
 ﻿#include "ipvmulti/Public/Motores/ProjectileSpawner.h"
 #include "Components/ArrowComponent.h"
-#include "ipvmulti/Public/MyBullet.h"  // Incluimos la clase correcta
+#include "ipvmulti/Public/Motores/ObstacleProjectile.h"
 
 AProjectileSpawner::AProjectileSpawner()
 {
@@ -51,7 +51,7 @@ void AProjectileSpawner::SpawnProjectile()
 	SpawnParams.Owner = this;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
 
-	AMyBullet* Projectile = GetWorld()->SpawnActor<AMyBullet>(
+	AObstacleProjectile* Projectile = GetWorld()->SpawnActor<AObstacleProjectile>(
 		ProjectileClass,
 		SpawnLocation,
 		SpawnRotation,

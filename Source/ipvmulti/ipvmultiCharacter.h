@@ -22,8 +22,33 @@ class IPVMULTI_API AipvmultiCharacter : public ACharacter
 public:
     AipvmultiCharacter();
 
+    /** Input actions exposed to Blueprint */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* MoveForwardAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* MoveRightAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* TurnAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* LookUpAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* TurnRateAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* LookUpRateAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* JumpAction;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* FireAction;
+
     /** Base turn rate */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Input)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category=Input)
     float TurnRateGamepad;
 
 protected:
@@ -46,7 +71,8 @@ protected:
 
     UFUNCTION()
     void OnRep_CurrentHealth();
-
+    
+    UFUNCTION(BlueprintNativeEvent, Category = "Health")
     void OnHealthUpdate();
 
 public:
@@ -90,11 +116,11 @@ public:
 
 protected:
     /** Projectile class */
-    UPROPERTY(EditDefaultsOnly, Category = "Gameplay|Projectile")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay|Projectile")
     TSubclassOf<class AThirdPersonMPProjectile> ProjectileClass;
 
     /** Fire rate */
-    UPROPERTY(EditDefaultsOnly, Category = "Gameplay")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
     float FireRate;
 
     /** Firing flag */

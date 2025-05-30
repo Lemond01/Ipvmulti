@@ -5,7 +5,7 @@
 #include "ProjectileSpawner.generated.h"
 
 class UArrowComponent;
-class AMyBullet;  // Cambiado a AMyBullet
+class AObstacleProjectile;  // Cambiado a AMyBullet
 
 UCLASS()
 class IPVMULTI_API AProjectileSpawner : public AActor
@@ -24,7 +24,7 @@ protected:
 
 	// Usamos AMyBullet en lugar de AThirdPersonMPProjectile
 	UPROPERTY(EditAnywhere, Category = "Projectile")
-	TSubclassOf<AMyBullet> ProjectileClass;
+	TSubclassOf<AObstacleProjectile> ProjectileClass;
 
 	UPROPERTY(EditAnywhere, Category = "Projectile")
 	float SpawnInterval = 2.0f;
