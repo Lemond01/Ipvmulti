@@ -21,6 +21,11 @@ void UUserWidget_01::NativeConstruct()
 
 	FString scoreString = FString::FromInt(myGameMode->counter);
 	scoreLabel->SetText(FText::FromString(scoreString));
+	if (scoreButon)
+	{
+		scoreButon->OnClicked.AddDynamic(this, &UUserWidget_01::RaiseScore);
+	}
+	UpdateScore();
 }
 
 void UUserWidget_01::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -51,3 +56,5 @@ void UUserWidget_01::RaiseScore()
 		UpdateScore();
 	}
 }
+
+

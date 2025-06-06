@@ -1,6 +1,8 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-#include "ipvmulti/Public/Motores/OtherPlayer.h" 
+#include "ipvmulti/Public/Motores/OtherPlayer.h"
+#include "ipvmulti/Public/Motores/GM_Base.h"
+#include "ipvmulti/Public/Motores/UserWidget_01.h" 
 
 // Sets default values
 AOtherPlayer::AOtherPlayer()
@@ -13,7 +15,22 @@ AOtherPlayer::AOtherPlayer()
 void AOtherPlayer::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	/*
+	if (GetController() && GetController() -> IsLocalController() && gameHudClass)
+	{
+		UUserWidget_01* gameHud = CreateWidget<UUserWidget_01>(GetWorld(), gameHudClass);
+		if (gameHud)
+		{
+			AAGM_Base* gameMode = CreateWidget<>UUGameHud>(GetWorld(), gameHudClass);
+			if (gameMode)
+			{
+				gameHud -> myGameMode = gameMode;
+			}
+			gameHud -> AddToViewport();
+			gameHud -> UpdateScore();
+		}
+	}
+	*/
 	
 }
 

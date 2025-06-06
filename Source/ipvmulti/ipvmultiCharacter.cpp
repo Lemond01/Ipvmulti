@@ -9,12 +9,18 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
+#include "Kismet/GameplayStatics.h"
+#include "Blueprint/UserWidget.h"
 #include "ipvmulti/Public/Actors/ThirdPersonMPProjectile.h"
 
 AipvmultiCharacter::AipvmultiCharacter()
 {
+    // Set size for collision capsule
+    GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+
     // Activate replication
     bReplicates = true;
+    SetReplicateMovement(true);
 
     // Camera setup
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -30,12 +36,28 @@ AipvmultiCharacter::AipvmultiCharacter()
     TurnRateGamepad = 45.f;
     MaxHealth = 100.f;
     CurrentHealth = MaxHealth;
+    MaxAmmo = 5;
+    CurrentAmmo = MaxAmmo;
     FireRate = 0.25f;
     bIsFiringWeapon = false;
     CurrentKeys = 0;
-
-    SetReplicatingMovement(true);
 }
+
+void AipvmultiCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+    
+    if (IsLocallyControlled() && AmmoWidgetClass)
+    {
+        AmmoWidgetInstance = CreateWidget<UUserWidget>(GetWorld(), AmmoWidgetClass);
+        if (AmmoWidgetInstance)
+        {
+            AmmoWidgetInstance->AddToViewport();
+            UpdateAmmoWidget();
+        }
+    }
+}
+
 
 void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -99,25 +121,39 @@ void AipvmultiCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Loc
 
 void AipvmultiCharacter::OnRep_CurrentHealth()
 {
-    OnHealthUpdate(); 
+    OnHealthUpdate();
 }
 
 void AipvmultiCharacter::OnHealthUpdate_Implementation()
 {
-    // Return health to screen
-    if (!HasAuthority())
+    if (GEngine)
     {
-        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, FString::Printf(TEXT("Vida: %.0f"), CurrentHealth));
-
-        if (CurrentHealth <= 0.f)
-        {
-            GEngine->AddOnScreenDebugMessage(-1, 10.f, FColor::Red, TEXT("¡Jugador muerto!"));
-            DisableInput(GetWorld()->GetFirstPlayerController());
-            SetLifeSpan(2.0f);
-        }
-        return;
+        FString HealthText = FString::Printf(TEXT("Health: %.1f/%.1f"), CurrentHealth, MaxHealth);
+        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, HealthText);
     }
 
+    if (CurrentHealth <= 0.f)
+    {
+        DisableInput(GetWorld()->GetFirstPlayerController());
+    }
+}
+
+void AipvmultiCharacter::AddAmmo(int32 Amount)
+{
+    if (HasAuthority())
+    {
+        CurrentAmmo = FMath::Clamp(CurrentAmmo + Amount, 0, MaxAmmo);
+        OnRep_CurrentAmmo();
+    }
+}
+
+void AipvmultiCharacter::UseAmmo(int32 Amount)
+{
+    if (HasAuthority())
+    {
+        CurrentAmmo = FMath::Max(0, CurrentAmmo - Amount);
+        OnRep_CurrentAmmo();
+    }
 }
 
 void AipvmultiCharacter::SetCurrentHealth(float healthValue)
@@ -142,8 +178,11 @@ float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& Dama
         float NewHealth = CurrentHealth - DamageTaken;
         SetCurrentHealth(NewHealth);
         
-        GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Orange, 
-            FString::Printf(TEXT("¡Recibiste %.0f de daño!"), DamageTaken));
+        if (GEngine)
+        {
+            GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Orange, 
+                FString::Printf(TEXT("Damage Taken: %.0f"), DamageTaken));
+        }
     }
 
     return DamageTaken;
@@ -151,14 +190,19 @@ float AipvmultiCharacter::TakeDamage(float DamageTaken, FDamageEvent const& Dama
 
 void AipvmultiCharacter::RespawnPlayer()
 {
-    CurrentHealth = MaxHealth;
-    OnHealthUpdate();
-    EnableInput(GetWorld()->GetFirstPlayerController());
+    if (HasAuthority())
+    {
+        CurrentHealth = MaxHealth;
+        CurrentAmmo = MaxAmmo;
+        OnHealthUpdate();
+        OnRep_CurrentAmmo();
+        EnableInput(GetWorld()->GetFirstPlayerController());
+    }
 }
 
 void AipvmultiCharacter::StartFire()
 {
-    if (!bIsFiringWeapon)
+    if (!bIsFiringWeapon && CurrentAmmo > 0)
     {
         bIsFiringWeapon = true;
         HandleFire();
@@ -172,22 +216,58 @@ void AipvmultiCharacter::StopFire()
     GetWorldTimerManager().ClearTimer(FiringTimer);
 }
 
-void AipvmultiCharacter::HandleFire_Implementation()
+void AipvmultiCharacter::OnRep_CurrentAmmo()
 {
-    if (ProjectileClass != nullptr)
+    UpdateAmmoWidget();
+}
+
+void AipvmultiCharacter::UpdateAmmoWidget()
+{
+    if (AmmoWidgetInstance && IsLocallyControlled())
     {
-        UWorld* const World = GetWorld();
-        if (World != nullptr)
-        {
-            const FRotator SpawnRotation = GetControlRotation();
-            const FVector SpawnLocation = GetActorLocation() + SpawnRotation.RotateVector(FVector(100.f, 0.f, 50.f));
+        FString Command = FString::Printf(TEXT("UpdateAmmo %d %d"), CurrentAmmo, MaxAmmo);
+        AmmoWidgetInstance->CallFunctionByNameWithArguments(*Command, nullptr, nullptr, true);
+    }
+}
 
-            FActorSpawnParameters SpawnParams;
-            SpawnParams.Owner = this;
-            SpawnParams.Instigator = GetInstigator();
+void AipvmultiCharacter::HandleFire()
+{
+    if (CurrentAmmo <= 0)
+    {
+        StopFire();
+        return;
+    }
 
-            World->SpawnActor<AThirdPersonMPProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
-        }
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        Server_HandleFire();
+    }
+    else
+    {
+        Server_HandleFire_Implementation();
+    }
+}
+
+bool AipvmultiCharacter::Server_HandleFire_Validate()
+{
+    return ProjectileClass != nullptr && CurrentAmmo > 0;
+}
+
+void AipvmultiCharacter::Server_HandleFire_Implementation()
+{
+    if (ProjectileClass && GetWorld() && CurrentAmmo > 0)
+    {
+        const FRotator SpawnRotation = GetControlRotation();
+        const FVector SpawnLocation = GetActorLocation() + SpawnRotation.RotateVector(FVector(100.f, 0.f, 50.f));
+
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Owner = this;
+        SpawnParams.Instigator = GetInstigator();
+        SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+
+        GetWorld()->SpawnActor<AThirdPersonMPProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+        
+        UseAmmo(1); // Consume 1 ammo
     }
 }
 
@@ -195,6 +275,9 @@ void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AipvmultiCharacter, CurrentHealth);
+    DOREPLIFETIME(AipvmultiCharacter, MaxHealth);
     DOREPLIFETIME(AipvmultiCharacter, CurrentKeys);
+    DOREPLIFETIME(AipvmultiCharacter, bIsFiringWeapon);
+    DOREPLIFETIME(AipvmultiCharacter, CurrentAmmo);
+    DOREPLIFETIME(AipvmultiCharacter, MaxAmmo);
 }
-
