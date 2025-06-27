@@ -1,4 +1,4 @@
-// Copyright 1998-2025 Epic Games, Inc. All Rights Reserved.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "ipvmultiCharacter.h"
 #include "Camera/CameraComponent.h"
@@ -12,17 +12,23 @@
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/UserWidget.h"
 #include "ipvmulti/Public/Actors/ThirdPersonMPProjectile.h"
+#include "ipvmulti/Public/Motores/Widgets/AmmoWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/MainMenuWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/PauseMenuWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/WinWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/KeyWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/KeyMessageWidget.h"
 
 AipvmultiCharacter::AipvmultiCharacter()
 {
-    // Set size for collision capsule
+    // Configuración del tamaño de la cápsula de colisión
     GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
-    // Activate replication
+    // Configuración de la replicación
     bReplicates = true;
     SetReplicateMovement(true);
 
-    // Camera setup
+    // Configuración de la cámara
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
     CameraBoom->TargetArmLength = 300.0f;
@@ -32,38 +38,56 @@ AipvmultiCharacter::AipvmultiCharacter()
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     FollowCamera->bUsePawnControlRotation = false;
 
-    // Gameplay setup
+    // Configuración del gameplay
     TurnRateGamepad = 45.f;
     MaxHealth = 100.f;
     CurrentHealth = MaxHealth;
     MaxAmmo = 5;
     CurrentAmmo = MaxAmmo;
+    MaxReserveAmmo = 30;
+    ReserveAmmo = 0;
     FireRate = 0.25f;
     bIsFiringWeapon = false;
     CurrentKeys = 0;
+    CurrentPauseWidget = nullptr;
 }
 
 void AipvmultiCharacter::BeginPlay()
 {
     Super::BeginPlay();
     
-    if (IsLocallyControlled() && AmmoWidgetClass)
+    // Crear widgets UI si es controlado localmente
+    if (IsLocallyControlled())
     {
-        AmmoWidgetInstance = CreateWidget<UUserWidget>(GetWorld(), AmmoWidgetClass);
-        if (AmmoWidgetInstance)
+        // Widget de munición
+        if (AmmoWidgetClass)
         {
-            AmmoWidgetInstance->AddToViewport();
-            UpdateAmmoWidget();
+            AmmoWidgetInstance = CreateWidget<UAmmoWidget>(GetWorld(), AmmoWidgetClass);
+            if (AmmoWidgetInstance)
+            {
+                AmmoWidgetInstance->AddToViewport();
+                UpdateAmmoWidget();
+            }
+        }
+
+        // Widget de llaves
+        if (KeyWidgetClass)
+        {
+            KeyWidgetInstance = CreateWidget<UKeyWidget>(GetWorld(), KeyWidgetClass);
+            if (KeyWidgetInstance)
+            {
+                KeyWidgetInstance->AddToViewport();
+                KeyWidgetInstance->UpdateKeys(CurrentKeys);
+            }
         }
     }
 }
 
-
 void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-    check(PlayerInputComponent);
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-    // Inputs setup
+    // Configuración de los inputs de movimiento
     PlayerInputComponent->BindAxis("MoveForward", this, &AipvmultiCharacter::MoveForward);
     PlayerInputComponent->BindAxis("MoveRight", this, &AipvmultiCharacter::MoveRight);
     PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
@@ -71,10 +95,13 @@ void AipvmultiCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
     PlayerInputComponent->BindAxis("TurnRate", this, &AipvmultiCharacter::TurnAtRate);
     PlayerInputComponent->BindAxis("LookUpRate", this, &AipvmultiCharacter::LookUpAtRate);
 
+    // Configuración de las acciones
     PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
     PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
     PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AipvmultiCharacter::StartFire);
     PlayerInputComponent->BindAction("Fire", IE_Released, this, &AipvmultiCharacter::StopFire);
+    PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &AipvmultiCharacter::Reload);
+    PlayerInputComponent->BindAction("Pause", IE_Pressed, this, &AipvmultiCharacter::TogglePauseMenu);
 }
 
 void AipvmultiCharacter::MoveForward(float Value)
@@ -138,24 +165,6 @@ void AipvmultiCharacter::OnHealthUpdate_Implementation()
     }
 }
 
-void AipvmultiCharacter::AddAmmo(int32 Amount)
-{
-    if (HasAuthority())
-    {
-        CurrentAmmo = FMath::Clamp(CurrentAmmo + Amount, 0, MaxAmmo);
-        OnRep_CurrentAmmo();
-    }
-}
-
-void AipvmultiCharacter::UseAmmo(int32 Amount)
-{
-    if (HasAuthority())
-    {
-        CurrentAmmo = FMath::Max(0, CurrentAmmo - Amount);
-        OnRep_CurrentAmmo();
-    }
-}
-
 void AipvmultiCharacter::SetCurrentHealth(float healthValue)
 {
     if (HasAuthority())
@@ -194,9 +203,72 @@ void AipvmultiCharacter::RespawnPlayer()
     {
         CurrentHealth = MaxHealth;
         CurrentAmmo = MaxAmmo;
+        ReserveAmmo = MaxReserveAmmo;
         OnHealthUpdate();
         OnRep_CurrentAmmo();
+        OnRep_ReserveAmmo();
         EnableInput(GetWorld()->GetFirstPlayerController());
+    }
+}
+
+void AipvmultiCharacter::AddAmmoToReserve(int32 Amount)
+{
+    if (HasAuthority())
+    {
+        ReserveAmmo = FMath::Clamp(ReserveAmmo + Amount, 0, MaxReserveAmmo);
+        OnRep_ReserveAmmo();
+    }
+}
+
+void AipvmultiCharacter::UseAmmo(int32 Amount)
+{
+    if (HasAuthority())
+    {
+        CurrentAmmo = FMath::Max(0, CurrentAmmo - Amount);
+        OnRep_CurrentAmmo();
+    }
+}
+
+void AipvmultiCharacter::Reload()
+{
+    if (HasAuthority() && CurrentAmmo < MaxAmmo && ReserveAmmo > 0)
+    {
+        int32 NeededAmmo = MaxAmmo - CurrentAmmo;
+        int32 AmmoToTransfer = FMath::Min(NeededAmmo, ReserveAmmo);
+        
+        CurrentAmmo += AmmoToTransfer;
+        ReserveAmmo -= AmmoToTransfer;
+        
+        OnRep_CurrentAmmo();
+        OnRep_ReserveAmmo();
+
+        // Podrías añadir aquí sonido/animación de recarga
+    }
+}
+
+void AipvmultiCharacter::OnRep_CurrentAmmo()
+{
+    UpdateAmmoWidget();
+}
+
+void AipvmultiCharacter::OnRep_ReserveAmmo()
+{
+    UpdateAmmoWidget();
+}
+
+void AipvmultiCharacter::UpdateAmmoWidget()
+{
+    if (AmmoWidgetInstance)
+    {
+        AmmoWidgetInstance->UpdateAmmo(CurrentAmmo, MaxAmmo, ReserveAmmo);
+    }
+}
+
+void AipvmultiCharacter::OnRep_CurrentKeys()
+{
+    if (KeyWidgetInstance && IsLocallyControlled())
+    {
+        KeyWidgetInstance->UpdateKeys(CurrentKeys);
     }
 }
 
@@ -214,20 +286,6 @@ void AipvmultiCharacter::StopFire()
 {
     bIsFiringWeapon = false;
     GetWorldTimerManager().ClearTimer(FiringTimer);
-}
-
-void AipvmultiCharacter::OnRep_CurrentAmmo()
-{
-    UpdateAmmoWidget();
-}
-
-void AipvmultiCharacter::UpdateAmmoWidget()
-{
-    if (AmmoWidgetInstance && IsLocallyControlled())
-    {
-        FString Command = FString::Printf(TEXT("UpdateAmmo %d %d"), CurrentAmmo, MaxAmmo);
-        AmmoWidgetInstance->CallFunctionByNameWithArguments(*Command, nullptr, nullptr, true);
-    }
 }
 
 void AipvmultiCharacter::HandleFire()
@@ -267,7 +325,53 @@ void AipvmultiCharacter::Server_HandleFire_Implementation()
 
         GetWorld()->SpawnActor<AThirdPersonMPProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
         
-        UseAmmo(1); // Consume 1 ammo
+        UseAmmo(1);
+    }
+}
+
+void AipvmultiCharacter::ShowMainMenu()
+{
+    if (MainMenuWidgetClass && IsLocallyControlled())
+    {
+        if (UMainMenuWidget* MainMenu = CreateWidget<UMainMenuWidget>(GetWorld(), MainMenuWidgetClass))
+        {
+            MainMenu->AddToViewport(100);
+            GetWorld()->GetFirstPlayerController()->bShowMouseCursor = true;
+            GetWorld()->GetFirstPlayerController()->SetInputMode(FInputModeUIOnly());
+        }
+    }
+}
+
+void AipvmultiCharacter::TogglePauseMenu()
+{
+    if (!IsLocallyControlled()) return;
+
+    APlayerController* PC = Cast<APlayerController>(GetController());
+    if (!PC || !PauseMenuClass) return;
+
+    bool bIsPaused = PC->IsPaused();
+    
+    if (bIsPaused)
+    {
+        if (CurrentPauseWidget)
+        {
+            CurrentPauseWidget->RemoveFromParent();
+            CurrentPauseWidget = nullptr;
+        }
+        PC->SetPause(false);
+        PC->bShowMouseCursor = false;
+        PC->SetInputMode(FInputModeGameOnly());
+    }
+    else
+    {
+        CurrentPauseWidget = CreateWidget<UPauseMenuWidget>(GetWorld(), PauseMenuClass);
+        if (CurrentPauseWidget)
+        {
+            CurrentPauseWidget->AddToViewport(100);
+            PC->SetPause(true);
+            PC->bShowMouseCursor = true;
+            PC->SetInputMode(FInputModeUIOnly());
+        }
     }
 }
 
@@ -280,4 +384,6 @@ void AipvmultiCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
     DOREPLIFETIME(AipvmultiCharacter, bIsFiringWeapon);
     DOREPLIFETIME(AipvmultiCharacter, CurrentAmmo);
     DOREPLIFETIME(AipvmultiCharacter, MaxAmmo);
+    DOREPLIFETIME(AipvmultiCharacter, ReserveAmmo);
+    DOREPLIFETIME(AipvmultiCharacter, MaxReserveAmmo);
 }

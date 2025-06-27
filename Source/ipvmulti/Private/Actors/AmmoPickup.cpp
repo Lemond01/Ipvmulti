@@ -35,7 +35,7 @@ void AAmmoPickup::OnOverlapBegin(UPrimitiveComponent* OverlappedComponent, AActo
 		AipvmultiCharacter* Character = Cast<AipvmultiCharacter>(OtherActor);
 		if (Character)
 		{
-			Character->AddAmmo(AmmoAmount);
+			Character->AddAmmoToReserve(AmmoAmount);
 			Destroy();
 		}
 	}

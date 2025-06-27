@@ -12,6 +12,7 @@ UCLASS()
 class IPVMULTI_API AKeyPickup : public AActor
 {
 	GENERATED_BODY()
+    
 public:
 	AKeyPickup();
 
@@ -21,6 +22,6 @@ protected:
 
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, 
-						UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
-						bool bFromSweep, const FHitResult& SweepResult);
+					   UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
+					   bool bFromSweep, const FHitResult& SweepResult);
 };

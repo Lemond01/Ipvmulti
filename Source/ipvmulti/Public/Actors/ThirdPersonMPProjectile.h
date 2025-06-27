@@ -19,30 +19,30 @@ protected:
  
 public:
 	virtual void Tick(float DeltaTime) override;
-	
+    
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	class USphereComponent* SphereComponent;
-	
+    
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	class UStaticMeshComponent* StaticMesh;
-	
+    
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	class UProjectileMovementComponent* ProjectileMovementComponent;
-	
+    
 	UPROPERTY(EditAnywhere, Category = "Effects")
 	class UParticleSystem* ExplosionEffect;
-	
+    
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Damage")
 	TSubclassOf<class UDamageType> DamageType;
-	
+    
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Damage")
 	float Damage;
  
 protected:
- 
 	virtual void Destroyed() override;
  
 	UFUNCTION(Category = "Projectile")
-	void OnProjectileImpact(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
- 
+	void OnProjectileImpact(UPrimitiveComponent* HitComponent, AActor* OtherActor, 
+						  UPrimitiveComponent* OtherComp, FVector NormalImpulse, 
+						  const FHitResult& Hit);
 };

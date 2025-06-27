@@ -13,11 +13,14 @@ UCLASS()
 class IPVMULTI_API ADoor : public AActor
 {
 	GENERATED_BODY()
+    
 public:
 	ADoor();
 
 	UPROPERTY(EditAnywhere)
 	int32 RequiredKeys = 1;
+
+	FTimerHandle WinWidgetTimerHandle;
 
 protected:
 	UPROPERTY(VisibleAnywhere)
@@ -34,8 +37,10 @@ protected:
 
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, 
-						UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
-						bool bFromSweep, const FHitResult& SweepResult);
+					   UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
+					   bool bFromSweep, const FHitResult& SweepResult);
 
 	void OpenDoor();
+
+	void ShowWinWidgetDelayed();
 };

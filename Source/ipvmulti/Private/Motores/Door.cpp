@@ -1,57 +1,74 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "ipvmulti/Public/Motores/Door.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "ipvmulti/ipvmultiCharacter.h"
+#include "ipvmulti/Public/Motores/Widgets/KeyMessageWidget.h"
+#include "ipvmulti/Public/Motores/Widgets/WinWidget.h"
+#include "Kismet/GameplayStatics.h"
 
-
-// Sets default values
 ADoor::ADoor()
 {
-	DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
-	RootComponent = DoorMesh;
+    DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
+    RootComponent = DoorMesh;
 
-	TriggerComp = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerComp"));
-	TriggerComp->InitBoxExtent(FVector(100.f, 100.f, 200.f));
-	TriggerComp->SetupAttachment(RootComponent);
-	TriggerComp->SetCollisionProfileName("Trigger");
+    TriggerComp = CreateDefaultSubobject<UBoxComponent>(TEXT("TriggerComp"));
+    TriggerComp->InitBoxExtent(FVector(100.f, 100.f, 200.f));
+    TriggerComp->SetupAttachment(RootComponent);
+    TriggerComp->SetCollisionProfileName("Trigger");
 
-	TriggerComp->OnComponentBeginOverlap.AddDynamic(this, &ADoor::OnOverlapBegin);
+    TriggerComp->OnComponentBeginOverlap.AddDynamic(this, &ADoor::OnOverlapBegin);
 
-	SolidCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("SolidCollision"));
-	SolidCollision->SetupAttachment(RootComponent);
-	SolidCollision->SetCollisionProfileName("BlockAllDynamic");
-	SolidCollision->SetBoxExtent(FVector(50.f, 100.f, 200.f));
-    
-	// Trigger para apertura (ya existente)
-	TriggerComp->SetBoxExtent(FVector(100.f, 100.f, 200.f));
-	TriggerComp->SetCollisionProfileName("Trigger");
+    SolidCollision = CreateDefaultSubobject<UBoxComponent>(TEXT("SolidCollision"));
+    SolidCollision->SetupAttachment(RootComponent);
+    SolidCollision->SetCollisionProfileName("BlockAllDynamic");
+    SolidCollision->SetBoxExtent(FVector(50.f, 100.f, 200.f));
 }
 
 void ADoor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, 
-						  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
-						  bool bFromSweep, const FHitResult& SweepResult)
+                          UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
+                          bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (AipvmultiCharacter* Player = Cast<AipvmultiCharacter>(OtherActor))
-	{
-		if (Player->GetCurrentKeys() >= RequiredKeys)
-		{
-			OpenDoor();
-			Player->UseKeys(RequiredKeys);
-		}
-		else
-		{
-			GEngine->AddOnScreenDebugMessage(-1, 3.f, FColor::Purple, 
-				FString::Printf(TEXT("Necesitas %d llaves más"), RequiredKeys - Player->GetCurrentKeys()));
-		}
-	}
+    if (AipvmultiCharacter* Player = Cast<AipvmultiCharacter>(OtherActor))
+    {
+        if (Player->GetCurrentKeys() >= RequiredKeys)
+        {
+            OpenDoor();
+            Player->UseKeys(RequiredKeys);
+        }
+        else
+        {
+            if (UKeyMessageWidget* MessageWidget = CreateWidget<UKeyMessageWidget>(GetWorld(), Player->KeyMessageWidgetClass))
+            {
+                MessageWidget->AddToViewport();
+                MessageWidget->ShowMissingKeyMessage(RequiredKeys - Player->GetCurrentKeys());
+            }
+        }
+    }
 }
 
 void ADoor::OpenDoor()
 {
-	// Implementa animación o rotación aquí
-	DoorMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
+    DoorMesh->SetRelativeRotation(FRotator(0.f, 90.f, 0.f));
+    GetWorld()->GetTimerManager().SetTimer(
+        WinWidgetTimerHandle,     
+        this,                     
+        &ADoor::ShowWinWidgetDelayed, 
+        2.0f,                     
+        false                   
+    );
 }
+
+void ADoor::ShowWinWidgetDelayed()
+{
+    if (AipvmultiCharacter* Player = Cast<AipvmultiCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
+    {
+        if (UWinWidget* WinWidget = CreateWidget<UWinWidget>(GetWorld(), Player->WinWidgetClass))
+        {
+            WinWidget->ShowWinScreen();
+        }
+    }
+}
+
 

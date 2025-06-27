@@ -1,8 +1,17 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "ipvmultiCharacter.generated.h"
+
+class UAmmoWidget;
+class UMainMenuWidget;
+class UPauseMenuWidget;
+class UWinWidget;
+class UKeyWidget;
+class UKeyMessageWidget;
 
 UCLASS(config=Game)
 class IPVMULTI_API AipvmultiCharacter : public ACharacter
@@ -34,9 +43,30 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
     int32 MaxAmmo = 5;
 
-    /** Widget class */
+    UPROPERTY(ReplicatedUsing = OnRep_ReserveAmmo, BlueprintReadOnly, Category = "Ammo")
+    int32 ReserveAmmo = 0;
+
+    UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+    int32 MaxReserveAmmo = 30;
+
+    /** Widget classes */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-    TSubclassOf<class UUserWidget> AmmoWidgetClass;
+    TSubclassOf<UAmmoWidget> AmmoWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UMainMenuWidget> MainMenuWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UPauseMenuWidget> PauseMenuClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UWinWidget> WinWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UKeyWidget> KeyWidgetClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    TSubclassOf<UKeyMessageWidget> KeyMessageWidgetClass;
 
     /** Health functions */
     UFUNCTION(BlueprintPure, Category = "Health")
@@ -55,11 +85,20 @@ public:
     UFUNCTION(BlueprintPure, Category = "Ammo")
     int32 GetMaxAmmo() const { return MaxAmmo; }
 
+    UFUNCTION(BlueprintPure, Category = "Ammo")
+    int32 GetReserveAmmo() const { return ReserveAmmo; }
+
+    UFUNCTION(BlueprintPure, Category = "Ammo")
+    int32 GetMaxReserveAmmo() const { return MaxReserveAmmo; }
+
     UFUNCTION(BlueprintCallable, Category = "Ammo")
-    void AddAmmo(int32 Amount);
+    void AddAmmoToReserve(int32 Amount);
 
     UFUNCTION(BlueprintCallable, Category = "Ammo")
     void UseAmmo(int32 Amount = 1);
+
+    UFUNCTION(BlueprintCallable, Category = "Ammo")
+    void Reload();
 
     virtual float TakeDamage(float DamageTaken, struct FDamageEvent const& DamageEvent, 
                            AController* EventInstigator, AActor* DamageCauser) override;
@@ -84,17 +123,24 @@ public:
     void StopFire();
 
     /** Keys system */
-    UPROPERTY(Replicated, BlueprintReadOnly)
+    UPROPERTY(ReplicatedUsing = OnRep_CurrentKeys, BlueprintReadOnly)
     int32 CurrentKeys = 0;
 
     UFUNCTION(BlueprintCallable, Category = "Keys")
-    void AddKey() { CurrentKeys++; }
+    void AddKey() { CurrentKeys++; OnRep_CurrentKeys(); }
 
     UFUNCTION(BlueprintCallable, Category = "Keys")
-    void UseKeys(int32 Amount) { CurrentKeys = FMath::Max(0, CurrentKeys - Amount); }
+    void UseKeys(int32 Amount) { CurrentKeys = FMath::Max(0, CurrentKeys - Amount); OnRep_CurrentKeys(); }
 
     UFUNCTION(BlueprintPure, Category = "Keys")
     int32 GetCurrentKeys() const { return CurrentKeys; }
+
+    /** UI Functions */
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void ShowMainMenu();
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void TogglePauseMenu();
 
 protected:
     /** Base turn rate */
@@ -103,9 +149,15 @@ protected:
 
     FTimerHandle FiringTimer;
 
-    /** Widget instance */
+    /** Widget instances */
     UPROPERTY()
-    class UUserWidget* AmmoWidgetInstance;
+    UAmmoWidget* AmmoWidgetInstance;
+
+    UPROPERTY()
+    UKeyWidget* KeyWidgetInstance;
+
+    UPROPERTY()
+    UPauseMenuWidget* CurrentPauseWidget;
 
     /** Movement functions */
     void MoveForward(float Value);
@@ -123,14 +175,20 @@ protected:
     
     UFUNCTION(BlueprintNativeEvent, Category = "Health")
     void OnHealthUpdate();
-    
 
     /** Ammo replication */
     UFUNCTION()
     void OnRep_CurrentAmmo();
 
+    UFUNCTION()
+    void OnRep_ReserveAmmo();
+
     UFUNCTION(BlueprintCallable, Category = "Ammo")
     void UpdateAmmoWidget();
+
+    /** Keys replication */
+    UFUNCTION()
+    void OnRep_CurrentKeys();
 
     /** Shooting implementation */
     UFUNCTION(BlueprintCallable, Category = "Gameplay")

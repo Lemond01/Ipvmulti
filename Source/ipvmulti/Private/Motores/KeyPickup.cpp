@@ -1,12 +1,9 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "ipvmulti/Public/Motores/KeyPickup.h"
 #include "Components/SphereComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "ipvmulti/ipvmultiCharacter.h"
 
-// Sets default values
 AKeyPickup::AKeyPickup()
 {
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComp"));
