@@ -141,6 +141,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "UI")
     void TogglePauseMenu();
+    
+    UPROPERTY(BlueprintReadOnly, Category = "Gameplay");
+    bool bIsCarryingObective;
 
 protected:
     /** Base turn rate */
